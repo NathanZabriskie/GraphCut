@@ -8,6 +8,10 @@ class GraphMaker:
 
     foreground = 1
     background = 0
+
+    seeds = 0
+    segmented = 1
+
     default = 0.5
     MAXIMUM = 1000000000
 
@@ -15,28 +19,36 @@ class GraphMaker:
         self.image = image
         self.graph = np.zeros_like(self.image.shape)
         self.overlay = np.zeros_like(self.image)
+        self.seed_overlay = np.zeros_like(self.image)
+        self.segment_overlay = np.zeros_like(self.image)
         self.background_seeds = []
         self.foreground_seeds = []
         self.background_average = np.array(3)
         self.foreground_average = np.array(3)
         self.nodes = []
         self.edges = []
-        self.segmented = np.zeros_like(self.image)
+        self.current_overlay = self.seeds
 
     def add_seed(self, x, y, type):
         if type == self.background:
             if not self.background_seeds.__contains__((x, y)):
                 self.background_seeds.append((x, y))
-                cv2.rectangle(self.overlay, (x-1, y-1), (x+1, y+1), (0, 0, 255), -1)
+                cv2.rectangle(self.seed_overlay, (x-1, y-1), (x+1, y+1), (0, 0, 255), -1)
         elif type == self.foreground:
             if not self.foreground_seeds.__contains__((x, y)):
                 self.foreground_seeds.append((x, y))
-                cv2.rectangle(self.overlay, (x-1, y-1), (x+1, y+1), (0, 255, 0), -1)
+                cv2.rectangle(self.seed_overlay, (x-1, y-1), (x+1, y+1), (0, 255, 0), -1)
 
     def clear_seeds(self):
         self.background_seeds = []
         self.foreground_seeds = []
-        self.overlay = np.zeros_like(self.overlay)
+        self.seed_overlay = np.zeros_like(self.seed_overlay)
+
+    def get_overlay(self):
+        if self.current_overlay == self.seeds:
+            return self.seed_overlay
+        else:
+            return self.segment_overlay
 
     def create_graph(self):
         if len(self.background_seeds) == 0 or len(self.foreground_seeds) == 0:
@@ -55,21 +67,22 @@ class GraphMaker:
 
     def find_averages(self):
         self.graph = np.zeros((self.image.shape[0], self.image.shape[1]))
+        print self.graph.shape
         self.graph.fill(self.default)
         self.background_average = np.zeros(3)
         self.foreground_average = np.zeros(3)
 
         for coordinate in self.background_seeds:
-            self.graph[coordinate[1], coordinate[0]] = 0
-            self.background_average += self.image[coordinate[1], coordinate[0]]
+            self.graph[coordinate[1] - 1, coordinate[0] - 1] = 0
+            #self.background_average += self.image[coordinate[1], coordinate[0]]
 
-        self.background_average /= len(self.background_seeds)
+        #self.background_average /= len(self.background_seeds)
 
         for coordinate in self.foreground_seeds:
-            self.graph[coordinate[1], coordinate[0]] = 1
-            self.foreground_average += self.image[coordinate[1], coordinate[0]]
+            self.graph[coordinate[1] - 1, coordinate[0] - 1] = 1
+            #self.foreground_average += self.image[coordinate[1], coordinate[0]]
 
-        self.foreground_average /= len(self.foreground_seeds)
+        #self.foreground_average /= len(self.foreground_seeds)
 
     def populate_graph(self):
         self.nodes = []
@@ -86,33 +99,34 @@ class GraphMaker:
                 self.nodes.append((self.get_node_num(x, y, self.image.shape), 0, self.MAXIMUM))
 
             else:
-                d_f = np.power(self.image[y, x] - self.foreground_average, 2)
+                '''d_f = np.power(self.image[y, x] - self.foreground_average, 2)
                 d_b = np.power(self.image[y, x] - self.background_average, 2)
                 d_f = np.sum(d_f)
                 d_b = np.sum(d_b)
                 e_f = d_f / (d_f + d_b)
-                e_b = d_b / (d_f + d_b)
-                self.nodes.append((self.get_node_num(x, y, self.image.shape), e_f, e_b))
+                e_b = d_b / (d_f + d_b)'''
+                self.nodes.append((self.get_node_num(x, y, self.image.shape), 0, 0))
 
-                if e_f > e_b:
+                '''if e_f > e_b:
                     self.graph[y, x] = 1.0
                 else:
-                    self.graph[y, x] = 0.0
+                    self.graph[y, x] = 0.0'''
 
         for (y, x), value in np.ndenumerate(self.graph):
-            if y == self.graph.shape[1] - 1 or x == self.graph.shape[0] - 1:
+            if y == self.graph.shape[0] - 1 or x == self.graph.shape[1] - 1:
                 continue
             my_index = self.get_node_num(x, y, self.image.shape)
 
             neighbor_index = self.get_node_num(x+1, y, self.image.shape)
-            g = 1 / (1 + np.sqrt(np.sum(np.power(self.image[y, x] - self.image[y, x+1], 2))))
-            self.edges.append((my_index, neighbor_index, np.abs(self.graph[y, x] - self.graph[y, x+1]) * g))
+            g = 1 / (1 + np.sum(np.power(self.image[y, x] - self.image[y, x+1], 2)))
+            self.edges.append((my_index, neighbor_index, g))
 
             neighbor_index = self.get_node_num(x, y+1, self.image.shape)
-            g = 1 / (1 + np.sqrt(np.sum(np.power(self.image[y, x] - self.image[y+1, x], 2))))
-            self.edges.append((my_index, neighbor_index, np.abs(self.graph[y, x] - self.graph[y+1, x]) * g))
+            g = 1 / (1 + np.sum(np.power(self.image[y, x] - self.image[y+1, x], 2)))
+            self.edges.append((my_index, neighbor_index, g))
 
     def cut_graph(self):
+        self.segment_overlay = np.zeros_like(self.segment_overlay)
         g = maxflow.Graph[float](len(self.nodes), len(self.edges))
         nodelist = g.add_nodes(len(self.nodes))
 
@@ -124,16 +138,18 @@ class GraphMaker:
 
         flow = g.maxflow()
 
-        self.segmented = np.zeros((self.image.shape[0], self.image.shape[1]))
-        for index in nodelist:
-            self.segmented[self.get_xy(index, self.image.shape)] = g.get_segment(nodelist[index])
+        for index in range(len(self.nodes)):
+            if g.get_segment(index) == 1:
+                xy = self.get_xy(index, self.image.shape)
+                self.segment_overlay[xy[1], xy[0]] = (255, 0, 255)
 
-        cv2.imwrite("output/cool.png", self.segmented)
+    def swap_overlay(self, overlay_num):
+        self.current_overlay = overlay_num
 
     @staticmethod
     def get_node_num(x, y, array_shape):
-        return y * array_shape[0] + x
+        return y * array_shape[1] + x
 
     @staticmethod
     def get_xy(nodenum, array_shape):
-        return nodenum % array_shape[0], nodenum / array_shape[0]
+        return (nodenum % array_shape[1]), (nodenum / array_shape[1])
