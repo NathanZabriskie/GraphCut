@@ -15,12 +15,13 @@ class GraphMaker:
     default = 0.5
     MAXIMUM = 1000000000
 
-    def __init__(self, image):
-        self.image = image
-        self.graph = np.zeros_like(self.image.shape)
-        self.overlay = np.zeros_like(self.image)
-        self.seed_overlay = np.zeros_like(self.image)
-        self.segment_overlay = np.zeros_like(self.image)
+    def __init__(self):
+        self.image = None
+        self.graph = None
+        self.overlay = None
+        self.seed_overlay = None
+        self.segment_overlay = None
+        self.load_image('resource/default.jpg')
         self.background_seeds = []
         self.foreground_seeds = []
         self.background_average = np.array(3)
@@ -29,7 +30,15 @@ class GraphMaker:
         self.edges = []
         self.current_overlay = self.seeds
 
+    def load_image(self, filename):
+        self.image = cv2.imread(filename)
+        self.graph = np.zeros_like(self.image)
+        self.seed_overlay = np.zeros_like(self.image)
+        self.segment_overlay = np.zeros_like(self.image)
+
     def add_seed(self, x, y, type):
+        if self.image is None:
+            print 'Please load an image before adding seeds.'
         if type == self.background:
             if not self.background_seeds.__contains__((x, y)):
                 self.background_seeds.append((x, y))
@@ -49,6 +58,12 @@ class GraphMaker:
             return self.seed_overlay
         else:
             return self.segment_overlay
+
+    def get_image_with_overlay(self, overlayNumber):
+        if overlayNumber == self.seeds:
+            return cv2.addWeighted(self.image, 0.9, self.seed_overlay, 0.4, 0.1)
+        else:
+            return cv2.addWeighted(self.image, 0.9, self.segment_overlay, 0.4, 0.1)
 
     def create_graph(self):
         if len(self.background_seeds) == 0 or len(self.foreground_seeds) == 0:
