@@ -42,20 +42,22 @@ class NewCutUI:
 
         # Setup Mode Buttons ##
         buttonLayout = QHBoxLayout()
-        foregroundButton = QPushButton('Add Foreground Seeds')
-        foregroundButton.clicked.connect(self.on_foreground)
+        self.foregroundButton = QPushButton('Add Foreground Seeds')
+        self.foregroundButton.clicked.connect(self.on_foreground)
+        self.foregroundButton.setStyleSheet("background-color: gray")
 
-        backGroundButton = QPushButton('Add Background Seeds')
-        backGroundButton.clicked.connect(self.on_background)
+        self.backGroundButton = QPushButton('Add Background Seeds')
+        self.backGroundButton.clicked.connect(self.on_background)
+        self.backGroundButton.setStyleSheet("background-color: white")
 
         clearButton = QPushButton('Clear All Seeds')
         clearButton.clicked.connect(self.on_clear)
 
-        segmentButton = QPushButton('See Current Segmentation')
+        segmentButton = QPushButton('Segment Image')
         segmentButton.clicked.connect(self.on_segment)
 
-        buttonLayout.addWidget(foregroundButton)
-        buttonLayout.addWidget(backGroundButton)
+        buttonLayout.addWidget(self.foregroundButton)
+        buttonLayout.addWidget(self.backGroundButton)
         buttonLayout.addWidget(clearButton)
         buttonLayout.addWidget(segmentButton)
         buttonLayout.addStretch()
@@ -65,17 +67,19 @@ class NewCutUI:
 
         # Setup Image Area ##
         imageLayout = QHBoxLayout()
-        parms = self.get_qimage_parms(self.graph_maker.get_image_with_overlay(self.graph_maker.seeds))
 
         self.seedLabel = QLabel()
-        self.seedLabel.setPixmap(QPixmap.fromImage(QImage(parms[0], parms[1], parms[2], parms[3])))
+        self.seedLabel.setPixmap(QPixmap.fromImage(
+            self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.seeds))))
+        self.seedLabel.mousePressEvent = self.mouse_down
+        self.seedLabel.mouseMoveEvent = self.mouse_drag
 
-        parms = self.get_qimage_parms(self.graph_maker.get_image_with_overlay(self.graph_maker.segmented))
-        self.overlayLabel = QLabel()
-        self.overlayLabel.setPixmap(QPixmap.fromImage(QImage(parms[0], parms[1], parms[2], parms[3])))
+        self.segmentLabel = QLabel()
+        self.segmentLabel.setPixmap(QPixmap.fromImage(
+            self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.segmented))))
 
         imageLayout.addWidget(self.seedLabel)
-        imageLayout.addWidget(self.overlayLabel)
+        imageLayout.addWidget(self.segmentLabel)
         imageLayout.addStretch()
         mainBox.addLayout(imageLayout)
         ##
@@ -89,41 +93,68 @@ class NewCutUI:
         sys.exit(self.a.exec_())
 
     @staticmethod
-    def get_qimage_parms(cvimage):
+    def get_qimage(cvimage):
         height, width, bytes_per_pix = cvimage.shape
         bytes_per_line = width * bytes_per_pix;
         cv2.cvtColor(cvimage, cv2.COLOR_BGR2RGB, cvimage)
-        return cvimage.data, width, height, QImage.Format_RGB888
+        return QImage(cvimage.data, width, height, QImage.Format_RGB888)
 
     @pyqtSlot()
     def on_foreground(self):
         self.seed_num = self.graph_maker.foreground
+        self.foregroundButton.setStyleSheet("background-color: gray")
+        self.backGroundButton.setStyleSheet("background-color: white")
 
     @pyqtSlot()
     def on_background(self):
         self.seed_num = self.graph_maker.background
+        self.foregroundButton.setStyleSheet("background-color: white")
+        self.backGroundButton.setStyleSheet("background-color: gray")
 
     @pyqtSlot()
     def on_clear(self):
         self.graph_maker.clear_seeds()
+        self.seedLabel.setPixmap(QPixmap.fromImage(
+                self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.seeds))))
 
     @pyqtSlot()
     def on_segment(self):
-        print 'Segmenting'
+        self.graph_maker.create_graph()
+        self.segmentLabel.setPixmap(QPixmap.fromImage(
+            self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.segmented))))
 
     @pyqtSlot()
     def on_open(self):
-        filename = QFileDialog.getOpenFileName()
-        print filename + "f"
+        f = QFileDialog.getOpenFileName()
+        if f is not None and f != "":
+            self.graph_maker.load_image(str(f))
+            self.seedLabel.setPixmap(QPixmap.fromImage(
+                self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.seeds))))
+            self.segmentLabel.setPixmap(QPixmap.fromImage(
+                self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.segmented))))
+
 
     @pyqtSlot()
     def on_save(self):
+        f = QFileDialog.getSaveFileName()
         print 'Saving'
+        if f is not None and f != "":
+            self.graph_maker.save_image(f)
 
     @pyqtSlot()
     def on_close(self):
         print 'Closing'
         self.window.close()
+
+    def mouse_down(self, event):
+        self.graph_maker.add_seed(event.x(), event.y(), self.seed_num)
+        self.seedLabel.setPixmap(QPixmap.fromImage(
+                self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.seeds))))
+
+    def mouse_drag(self, event):
+        self.graph_maker.add_seed(event.x(), event.y(), self.seed_num)
+        self.seedLabel.setPixmap(QPixmap.fromImage(
+                self.get_qimage(self.graph_maker.get_image_with_overlay(self.graph_maker.seeds))))
 
 if __name__ == "__main__":
     newUI = NewCutUI()

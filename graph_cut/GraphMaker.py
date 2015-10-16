@@ -21,6 +21,7 @@ class GraphMaker:
         self.overlay = None
         self.seed_overlay = None
         self.segment_overlay = None
+        self.mask = None
         self.load_image('resource/default.jpg')
         self.background_seeds = []
         self.foreground_seeds = []
@@ -35,6 +36,7 @@ class GraphMaker:
         self.graph = np.zeros_like(self.image)
         self.seed_overlay = np.zeros_like(self.image)
         self.segment_overlay = np.zeros_like(self.image)
+        self.mask = None
 
     def add_seed(self, x, y, type):
         if self.image is None:
@@ -142,6 +144,7 @@ class GraphMaker:
 
     def cut_graph(self):
         self.segment_overlay = np.zeros_like(self.segment_overlay)
+        self.mask = np.zeros_like(self.image, dtype=bool)
         g = maxflow.Graph[float](len(self.nodes), len(self.edges))
         nodelist = g.add_nodes(len(self.nodes))
 
@@ -157,9 +160,20 @@ class GraphMaker:
             if g.get_segment(index) == 1:
                 xy = self.get_xy(index, self.image.shape)
                 self.segment_overlay[xy[1], xy[0]] = (255, 0, 255)
+                self.mask[xy[1], xy[0]] = (True, True, True)
 
     def swap_overlay(self, overlay_num):
         self.current_overlay = overlay_num
+
+    def save_image(self, filename):
+        if self.mask is None:
+            print 'Please segment the image before saving.'
+            return
+
+        to_save = np.zeros_like(self.image)
+
+        np.copyto(to_save, self.image, where=self.mask)
+        cv2.imwrite(str(filename), to_save)
 
     @staticmethod
     def get_node_num(x, y, array_shape):
